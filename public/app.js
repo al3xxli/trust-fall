@@ -18,12 +18,14 @@ function buttons(){
   start.textContent=cameraOn?"Stop camera":"Start camera";
   start.disabled=busyCamera || connecting;
   usb.textContent=connecting?"Connecting…":board.active?"Stop mechanism":"Connect Uno";
-  usb.disabled=!cameraOn || connecting || board.closing;
+  usb.disabled=connecting || board.closing;
   usb.setAttribute("aria-pressed",String(board.active));
 }
 
-async function stopBoard(){
-  await board.close();
+async function stopBoard(manual=false){
+  try { await board.close(manual); }
+  catch { notice.textContent="Stop unconfirmed. Switch off motor power to stop the belt."; }
+  state.running=board.running ?? cameraOn;
   buttons();
 }
 
@@ -32,10 +34,9 @@ async function stopCamera(){
   cancelAnimationFrame(frameId);
   cameraOn=false;
   showPoseStatus("Start the camera to begin");
-  state.running=false;state.tilt=0;
+  state.running=board.running ?? false;state.tilt=board.running ? board.feedback : 0;
   stream?.getTracks().forEach(t=>t.stop());stream=null;video.srcObject=null;
   lean.reset();paintPose(overlay,video,lean,performance.now());
-  await stopBoard();
   buttons();
 }
 
@@ -48,7 +49,7 @@ function frame(now){
     }
     showPoseStatus(lean.status(now,poseStatus.textContent));
     state.tilt=board.active?board.feedback:lean.amount(now);
-    state.running=board.active?!!board.running:true;
+    state.running=board.running ?? true;
     paintPose(overlay,video,lean,now);
     frameId=requestAnimationFrame(frame);
   } catch {
@@ -80,12 +81,11 @@ start.onclick=async()=>{
 
 usb.onclick=async()=>{
   notice.textContent="";
-  if(board.active){await stopBoard();return;}
+  if(board.active){await stopBoard(true);return;}
   connecting=true;buttons();
-  const token=generation;
   try {
     await board.connect();
-    if(!cameraOn || token!==generation || document.hidden) await board.close();
+    state.running=board.running;
   } catch(error){
     if(error.name!=="NotFoundError") notice.textContent=error.message || "Close Serial Monitor and reconnect.";
   } finally {connecting=false;buttons();}
@@ -96,11 +96,10 @@ setInterval(async()=>{
   catch(error){notice.textContent=error.message;await stopBoard();}
 },120);
 
-document.addEventListener("visibilitychange",()=>{if(document.hidden && board.active) stopBoard();});
 window.addEventListener("pagehide",()=>{if(board.active) stopBoard();});
 window.addEventListener("keydown",event=>{
   if(event.repeat)return;
-  if(event.key==="Escape"){stopBoard();return;}
+  if(event.key==="Escape"){stopBoard(true);return;}
   if(event.key.toLowerCase()==="b" && state.running) syncLap();
   if(event.key.toLowerCase()==="u") lean.reset();
 });

@@ -7,6 +7,7 @@ export class Controller {
     this.busy = false;
     this.feedback = 0;
     this.lastAck = 0;
+    this.running = null;  // No belt status until the Uno is connected.
   }
 
   async connect() {
@@ -26,6 +27,11 @@ export class Controller {
         await wait(300);
       }
       if (!this.identified) throw Error("Upload TrustFallDemo.ino to this Uno and reconnect.");
+      this.started = false;
+      await this.writer.write(enc.encode("BELT ON\n"));
+      for (let attempt = 0; attempt < 12 && !this.started; attempt++) await wait(100);
+      if (!this.started) throw Error("Uno did not confirm belt start. Reconnect USB.");
+      this.lastSend = -Infinity;
       this.active = true;
       this.lastAck = performance.now();
     } catch (error) {
@@ -46,7 +52,9 @@ export class Controller {
         while ((split = buffer.indexOf("\n")) >= 0) {
           const line = buffer.slice(0, split).trim();
           buffer = buffer.slice(split + 1);
-          if (line === "TRUSTFALL DEMO 1") this.identified = true;
+          if (line === "TRUSTFALL DEMO 2") this.identified = true;
+          if (line === "BELT ON" && this.identified) { this.started = true; this.running = true; }
+          if (line === "IDLE") this.running = false;
           if (line === "ERR SERVO") this.readError = true;
           const match = /^RUN (\d{4})$/.exec(line);
           if (match && this.identified) {
@@ -62,25 +70,30 @@ export class Controller {
 
   async drive(lean) {
     if (!this.active || this.busy) return;
-    if (this.readError || performance.now() - this.lastAck > 1400) throw Error("Uno stopped replying. Reconnect USB.");
+    const now = performance.now();
+    if (now - this.lastSend > 1400) this.lastAck = now;  // Resume after a background tab.
+    this.lastSend = now;
+    if (this.readError || now - this.lastAck > 1400) throw Error("Uno stopped replying. Reconnect USB.");
     this.busy = true;
     try { await this.writer.write(enc.encode("LEAN " + Math.round(lean * 100) + "\n")); }
     finally { this.busy = false; }
   }
 
-  async close() {
+  async close(stopMotor = false) {
     this.active = false;
-    this.running = false;
     if (!this.port || this.closing) return;
     this.closing = true;
     try {
-      if (this.identified) await this.writer.write(enc.encode("HALT\n")).catch(() => {});
+      if (stopMotor && this.identified) {
+        await this.writer.write(enc.encode("HALT\n"));
+        this.running = false;
+      }
+    } finally {
       await this.reader.cancel().catch(() => {});
       await this.readTask;
       this.reader.releaseLock();
       this.writer.releaseLock();
       await this.port.close().catch(() => {});
-    } finally {
       this.port = null;
       this.identified = false;
       this.closing = false;

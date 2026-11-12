@@ -7,14 +7,18 @@
 constexpr byte ENA = 5, IN1 = 7, IN2 = 8, SERVO_PIN = 9;
 constexpr int UPRIGHT_US = 1350, CENTER_US = 1500, FULL_LEAN_US = 1650;
 constexpr byte BELT_PWM = 160;
-constexpr unsigned long TIMEOUT_MS = 1200;
 Servo rocker;
 bool running = false;
 int pulse = CENTER_US, target = CENTER_US;
-unsigned long lastInput = 0, lastStep = 0;
+unsigned long lastStep = 0;
 char line[20];
 size_t used = 0;
 bool overflow = false;
+
+void startBelt() {
+  analogWrite(ENA, BELT_PWM);
+  running = true;
+}
 
 void halt() {
   analogWrite(ENA, 0);
@@ -24,7 +28,12 @@ void halt() {
 
 void handleLine() {
   if (!strcmp(line, "PROBE")) {
-    Serial.println("TRUSTFALL DEMO 1");
+    Serial.println("TRUSTFALL DEMO 2");
+    return;
+  }
+  if (!strcmp(line, "BELT ON")) {
+    startBelt();
+    Serial.println("BELT ON");
     return;
   }
   if (!strcmp(line, "HALT")) {
@@ -36,18 +45,15 @@ void handleLine() {
   char *end;
   long lean = strtol(line + 5, &end, 10);
   if (*end || lean < 0 || lean > 100) return;
+  if (!running) return;  // Only BELT ON can restart an explicitly stopped belt.
   if (!rocker.attached()) {
     if (!rocker.attach(SERVO_PIN, 1000, 2000)) {
-      halt();
       Serial.println("ERR SERVO");
       return;
     }
     rocker.writeMicroseconds(pulse);
   }
   target = map(lean, 0, 100, UPRIGHT_US, FULL_LEAN_US);
-  if (!running) analogWrite(ENA, BELT_PWM);
-  running = true;
-  lastInput = millis();
   Serial.print("RUN ");
   Serial.println(pulse);
 }
@@ -58,7 +64,7 @@ void setup() {
   pinMode(IN2, OUTPUT);
   digitalWrite(IN1, HIGH);
   digitalWrite(IN2, LOW);
-  analogWrite(ENA, 0);
+  startBelt();  // The belt runs locally, even before the camera or USB connects.
   Serial.begin(115200);
 }
 
@@ -76,8 +82,7 @@ void loop() {
     } else overflow = true;
   }
   unsigned long now = millis();
-  if (running && now - lastInput >= TIMEOUT_MS) halt();
-  if (running && now - lastStep >= 20) {
+  if (rocker.attached() && pulse != target && now - lastStep >= 20) {
     lastStep = now;
     pulse += constrain(target - pulse, -6, 6);
     rocker.writeMicroseconds(pulse);

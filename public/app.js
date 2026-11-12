@@ -5,7 +5,10 @@ import { Controller } from "./controller.js";
 const get=id=>document.getElementById(id);
 const video=document.querySelector("video"), overlay=get("pose");
 const start=get("start"), usb=get("usb"), notice=get("notice");
-const board=new Controller(), lean=new Lean(), state={running:false,tilt:0};
+const lean=new Lean(), state={running:false,tilt:0};
+const board=new Controller(message=>{
+  notice.textContent=message;state.running=false;buttons();
+});
 const syncLap=mountMachine(get("drawing"),state);
 const poseStatus=get("pose-status");
 function showPoseStatus(text) {
@@ -22,8 +25,8 @@ function buttons(){
   usb.setAttribute("aria-pressed",String(board.active));
 }
 
-async function stopBoard(manual=false){
-  try { await board.close(manual); }
+async function stopBoard(){
+  try { await board.close(); }
   catch { notice.textContent="USB disconnect interrupted. Switch off motor power to stop the belt."; }
   state.running=board.running ?? cameraOn;
   buttons();
@@ -81,7 +84,7 @@ start.onclick=async()=>{
 
 usb.onclick=async()=>{
   notice.textContent="";
-  if(board.active){await stopBoard(true);return;}
+  if(board.active){await stopBoard();return;}
   connecting=true;buttons();
   try {
     await board.connect();
@@ -90,16 +93,14 @@ usb.onclick=async()=>{
     if(error.name!=="NotFoundError") notice.textContent=error.message || "Close Serial Monitor and reconnect.";
   } finally {connecting=false;buttons();}
 };
-setInterval(async()=>{
-  if(!cameraOn || !board.active || document.hidden)return;
-  try {await board.drive(lean.amount(performance.now()));}
-  catch(error){notice.textContent=error.message;await stopBoard();}
+setInterval(()=>{
+  if(board.active) board.drive(cameraOn && !document.hidden ? lean.amount(performance.now()) : 0);
 },120);
 
 window.addEventListener("pagehide",()=>{if(board.active) stopBoard();});
 window.addEventListener("keydown",event=>{
   if(event.repeat)return;
-  if(event.key==="Escape"){stopBoard(true);return;}
+  if(event.key==="Escape"){stopBoard();return;}
   if(event.key.toLowerCase()==="b" && state.running) syncLap();
   if(event.key.toLowerCase()==="u") lean.reset();
 });

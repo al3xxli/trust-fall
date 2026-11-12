@@ -17,14 +17,14 @@ let lastFrame=-1, lastDetect=0, frameId=0, generation=0;
 function buttons(){
   start.textContent=cameraOn?"Stop camera":"Start camera";
   start.disabled=busyCamera || connecting;
-  usb.textContent=connecting?"Connecting…":board.active?"Stop mechanism":"Connect Uno";
+  usb.textContent=connecting?"Connecting…":board.active?"Disconnect Uno":"Connect Uno";
   usb.disabled=connecting || board.closing;
   usb.setAttribute("aria-pressed",String(board.active));
 }
 
 async function stopBoard(manual=false){
   try { await board.close(manual); }
-  catch { notice.textContent="Stop unconfirmed. Switch off motor power to stop the belt."; }
+  catch { notice.textContent="USB disconnect interrupted. Switch off motor power to stop the belt."; }
   state.running=board.running ?? cameraOn;
   buttons();
 }

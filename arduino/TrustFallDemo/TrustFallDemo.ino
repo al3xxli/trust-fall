@@ -1,29 +1,29 @@
 // Trust Fall camera demo, UNO R4 Minima. Fixed ramp, unloaded rocker on D9.
 // Servo pulse widths are explicit. This sketch never reads or writes EEPROM.
-#include <Servo.h>
+#include <Arduino.h>
 #include <stdlib.h>
 #include <string.h>
 
 constexpr byte ENA = 5, IN1 = 7, IN2 = 8, SERVO_PIN = 9;
 constexpr int UPRIGHT_US = 1350, CENTER_US = 1500, FULL_LEAN_US = 1650;
 constexpr byte BELT_PWM = 160;
-Servo rocker;
-bool running = false;
+bool rockerEnabled = false;
 int pulse = CENTER_US, target = CENTER_US;
-unsigned long lastStep = 0;
+unsigned long lastFrameUs = 0;
 char line[20];
 size_t used = 0;
 bool overflow = false;
 
-void startBelt() {
-  analogWrite(ENA, BELT_PWM);
-  running = true;
-}
-
-void halt() {
-  analogWrite(ENA, 0);
-  running = false;
-  target = pulse;  // Hold the unloaded rocker where it was stopped.
+// D5 runs on hardware PWM. Generate the separate D9 pulse in the main loop
+// so starting camera control never allocates or reconfigures a motor timer.
+void serviceRocker() {
+  const unsigned long now = micros();
+  if (!rockerEnabled || now - lastFrameUs < 20000UL) return;
+  lastFrameUs = now;
+  pulse += constrain(target - pulse, -6, 6);
+  digitalWrite(SERVO_PIN, HIGH);
+  delayMicroseconds(pulse);
+  digitalWrite(SERVO_PIN, LOW);
 }
 
 void handleLine() {
@@ -32,12 +32,11 @@ void handleLine() {
     return;
   }
   if (!strcmp(line, "BELT ON")) {
-    startBelt();
-    Serial.println("BELT ON");
+    Serial.println("BELT ON");  // Compatibility with the existing demo webpage.
     return;
   }
-  if (!strcmp(line, "HALT")) {
-    halt();
+  if (!strcmp(line, "HALT") || !strcmp(line, "HOLD")) {
+    target = pulse;  // An older client may send HALT. It only holds the rocker.
     Serial.println("IDLE");
     return;
   }
@@ -45,14 +44,7 @@ void handleLine() {
   char *end;
   long lean = strtol(line + 5, &end, 10);
   if (*end || lean < 0 || lean > 100) return;
-  if (!running) return;  // Only BELT ON can restart an explicitly stopped belt.
-  if (!rocker.attached()) {
-    if (!rocker.attach(SERVO_PIN, 1000, 2000)) {
-      Serial.println("ERR SERVO");
-      return;
-    }
-    rocker.writeMicroseconds(pulse);
-  }
+  rockerEnabled = true;
   target = map(lean, 0, 100, UPRIGHT_US, FULL_LEAN_US);
   Serial.print("RUN ");
   Serial.println(pulse);
@@ -64,7 +56,9 @@ void setup() {
   pinMode(IN2, OUTPUT);
   digitalWrite(IN1, HIGH);
   digitalWrite(IN2, LOW);
-  startBelt();  // The belt runs locally, even before the camera or USB connects.
+  analogWrite(ENA, BELT_PWM);  // Only motor speed write, for the whole power cycle.
+  pinMode(SERVO_PIN, OUTPUT);
+  digitalWrite(SERVO_PIN, LOW);
   Serial.begin(115200);
 }
 
@@ -81,10 +75,5 @@ void loop() {
       line[used++] = c;
     } else overflow = true;
   }
-  unsigned long now = millis();
-  if (rocker.attached() && pulse != target && now - lastStep >= 20) {
-    lastStep = now;
-    pulse += constrain(target - pulse, -6, 6);
-    rocker.writeMicroseconds(pulse);
-  }
+  serviceRocker();
 }

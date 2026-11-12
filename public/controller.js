@@ -54,7 +54,6 @@ export class Controller {
           buffer = buffer.slice(split + 1);
           if (line === "TRUSTFALL DEMO 2") this.identified = true;
           if (line === "BELT ON" && this.identified) { this.started = true; this.running = true; }
-          if (line === "IDLE") this.running = false;
           if (line === "ERR SERVO") this.readError = true;
           const match = /^RUN (\d{4})$/.exec(line);
           if (match && this.identified) {
@@ -79,14 +78,13 @@ export class Controller {
     finally { this.busy = false; }
   }
 
-  async close(stopMotor = false) {
+  async close(holdRocker = false) {
     this.active = false;
     if (!this.port || this.closing) return;
     this.closing = true;
     try {
-      if (stopMotor && this.identified) {
-        await this.writer.write(enc.encode("HALT\n"));
-        this.running = false;
+      if (holdRocker && this.identified) {
+        await this.writer.write(enc.encode("HOLD\n"));
       }
     } finally {
       await this.reader.cancel().catch(() => {});

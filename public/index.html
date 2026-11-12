@@ -6,7 +6,10 @@
 </head>
 <body>
 <main>
-<section id="machine" aria-label="Animated Trust Fall mechanism"></section>
+<section id="machine" aria-label="Animated Trust Fall mechanism">
+  <div id="pose-status" role="status" aria-live="polite" aria-atomic="true">Start the camera to begin</div>
+  <div id="drawing"></div>
+</section>
 <section id="camera" aria-label="Camera with lean angle overlay">
   <video muted playsinline autoplay></video><canvas id="pose" aria-hidden="true"></canvas>
   <div class="controls"><button id="start">Start camera</button><button id="usb" disabled>Connect Uno</button></div>

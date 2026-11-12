@@ -6,7 +6,11 @@ const get=id=>document.getElementById(id);
 const video=document.querySelector("video"), overlay=get("pose");
 const start=get("start"), usb=get("usb"), notice=get("notice");
 const board=new Controller(), lean=new Lean(), state={running:false,tilt:0};
-const syncLap=mountMachine(get("machine"),state);
+const syncLap=mountMachine(get("drawing"),state);
+const poseStatus=get("pose-status");
+function showPoseStatus(text) {
+  if (poseStatus.textContent !== text) poseStatus.textContent=text;
+}
 let tracker, stream, cameraOn=false, connecting=false, busyCamera=false;
 let lastFrame=-1, lastDetect=0, frameId=0, generation=0;
 
@@ -27,6 +31,7 @@ async function stopCamera(){
   ++generation;
   cancelAnimationFrame(frameId);
   cameraOn=false;
+  showPoseStatus("Start the camera to begin");
   state.running=false;state.tilt=0;
   stream?.getTracks().forEach(t=>t.stop());stream=null;video.srcObject=null;
   lean.reset();paintPose(overlay,video,lean,performance.now());
@@ -41,6 +46,7 @@ function frame(now){
       lastFrame=video.currentTime;lastDetect=now;
       lean.update(tracker.detectForVideo(video,now).landmarks[0],video.videoWidth,video.videoHeight,now);
     }
+    showPoseStatus(lean.status(now,poseStatus.textContent));
     state.tilt=board.active?board.feedback:lean.amount(now);
     state.running=board.active?!!board.running:true;
     paintPose(overlay,video,lean,now);

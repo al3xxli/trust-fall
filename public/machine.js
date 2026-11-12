@@ -1,6 +1,6 @@
 // Side elevation. Coordinates are attached to the low axle so the belt pivots as one piece.
 export function mountMachine(host, state) {
-  let phase=0, lap=5.8, lastTap=0, tilt=0;
+  let phase=0, lap=5.8, lastTap=0, tilt=0, glow=0;
   const tau=Math.PI*2, len=244, axle=[144,228];
   const clamps=(n,a,b)=>Math.max(a,Math.min(b,n));
   function gear(g,x,y,r,teeth,angle,inside) {
@@ -33,7 +33,11 @@ export function mountMachine(host, state) {
     p.setup=()=>{p.createCanvas(host.clientWidth,host.clientHeight).parent(host);p.pixelDensity(Math.min(devicePixelRatio,2));};
     p.draw=()=>{
       const dt=Math.min(.12,p.deltaTime/1000);
+      const lastTilt=tilt;
       tilt+=(state.tilt-tilt)*(1-Math.exp(-dt*12));
+      const speed=Math.abs(tilt-lastTilt)/Math.max(dt,.001);
+      const intensity=clamps((speed-.045)/.55,0,1);
+      glow=Math.max(intensity,glow*Math.exp(-dt*5));
       if(state.running) phase=(phase+dt/lap)%1;
       const g=p.drawingContext, w=p.width,h=p.height;
       p.background("#e9e8df");
@@ -60,6 +64,18 @@ export function mountMachine(host, state) {
       capsule(g,-15,-14,len+30,29,14,"#4e6559");
       capsule(g,-14,-13,len+28,23,12,"#c5d1c4");
       segment(g,0,-12,len,-12,"#fbfbef",2.1);
+      if (glow>.02) {
+        g.save();
+        g.globalAlpha=glow;
+        g.shadowColor="#75d733";
+        g.shadowBlur=14*z;
+        g.strokeStyle="#ceff86";
+        g.lineWidth=3.5;
+        g.beginPath();
+        g.roundRect(-15,-14,len+30,29,14);
+        g.stroke();
+        g.restore();
+      }
       for(let i=0;i<14;i++){const x=((i/14+phase)%1)*len;segment(g,x,11,x+3,11,"#c4d99b",2.8);}
       for(const x of [0,len]){dot(g,x,0,9.5,"#708679");dot(g,x,0,5.4,"#e5e9d9");
         const spin=-phase*tau*5;segment(g,x,0,x+5*Math.cos(spin),5*Math.sin(spin),"#647b6c",1.8);}

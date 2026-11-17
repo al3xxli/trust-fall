@@ -1,7 +1,7 @@
 // Own the serial stream and its heartbeat separately from camera inference.
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 const encoder = new TextEncoder();
-const low = 1350, high = 1650;
+const low = 1300, high = 1450, beltSpeed = 0;
 const status = /^(STOPPED|CALIBRATING|ARMED) pulse_us=(\d+) low=(\d+) high=(\d+) speed=(\d+) input=(live|idle)$/;
 let port, reader, writer, readTask, pending, heartbeat, identified = false, closing = false;
 let amount = 0, poseTime = -Infinity, lastStatus = 0, writing = false, decide;
@@ -21,7 +21,7 @@ function accept(line) {
   }
   lastStatus = performance.now();
   postMessage({type:"status", feedback:Math.max(0, Math.min(1,(+m[2]-low)/(high-low))),
-    running:m[6] === "live" && +m[5] > 0});
+    running:m[6] === "live" && +m[5] === beltSpeed});
 }
 
 async function readLines() {
@@ -58,25 +58,6 @@ function command(line, pattern, timeout=1500) {
   });
 }
 
-async function configureEndpoints() {
-  await command("CAL",/^CALIBRATING:/);
-  let at=1500;
-  async function jogTo(goal) {
-    while(at!==goal) {
-      const expected=at+Math.sign(goal-at)*10;
-      const m=status.exec(await command(goal>at?"+":"-",status));
-      if (m[1]!=="CALIBRATING" || +m[2]!==expected) throw Error("Unexpected rocker position during setup.");
-      at=expected;
-      await delay(55);
-    }
-  }
-  await jogTo(low); await command("LOW",/^LOW marked at 1350$/);
-  await jogTo(high); await command("HIGH",/^HIGH marked at 1650$/);
-  await jogTo(1500); await command("SAVE",/^SAVED; send ARM to enable control$/);
-  const result=status.exec(await command("STATUS",status));
-  if (+result[3]!==low || +result[4]!==high) throw Error("Uno did not save the demo endpoints.");
-}
-
 async function tick() {
   if (closing || writing) return;
   writing = true;
@@ -104,20 +85,17 @@ async function openSession(info) {
       identified=reply==="CHECK 37" || reply==="ERR send STOP before CHECK";
     } catch(error){if(closing || !error.message.startsWith("No reply"))throw error;}
   }
-  if(!identified) throw Error("Upload the original TrustFall.ino, close Serial Monitor, then reconnect.");
+  if(!identified) throw Error("Upload the camera sketch, close Serial Monitor, then reconnect.");
   await command("STOP",/^STOPPED$/);
   const m=status.exec(await command("STATUS",status));
   if(+m[3]!==low || +m[4]!==high) {
-    const approved=await new Promise(resolve=>{decide=resolve;postMessage({type:"setup",low:+m[3],high:+m[4]});});
-    decide=null;
-    if(!approved)throw Error("Setup canceled. The belt is stopped.");
-    await configureEndpoints();
+    throw Error("Upload the updated camera sketch (" + low + " to " + high + " microseconds), then reconnect.");
   }
-  if(+m[5]!==160) await command("SPEED 160",status);
+  if(+m[5]!==beltSpeed) await command("SPEED "+beltSpeed,status);
   await command("ARM",/^ARMED$/);
   await send("LEAN 0");
   const first=status.exec(await command("STATUS",status));
-  if(first[1]!=="ARMED" || first[6]!=="live" || +first[5]!==160) throw Error("Uno did not confirm live motor control.");
+  if(first[1]!=="ARMED" || first[6]!=="live" || +first[5]!==beltSpeed) throw Error("Uno did not confirm live motor control.");
   lastStatus=performance.now();
   heartbeat=setInterval(tick,120);
   postMessage({type:"ready"});

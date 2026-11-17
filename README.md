@@ -1,12 +1,12 @@
 # Trust Fall
 
 1. Support the ramp at its fixed angle and leave the unloaded rocker on the servo, disconnected from the ramp link. Keep the existing Uno R4 Minima wiring. The servo signal is D9. The L298N uses ENA D5, IN1 D7 and IN2 D8.
-2. Upload the **original full-operation** sketch, `arduino/TrustFall/TrustFall.ino`, or leave it installed if it is already on the Uno. Close Serial Monitor and any Python camera/assembly helper. The original enables the belt after the interface connects.
+2. Upload the camera sketch in `arduino/TrustFall/TrustFall.ino` to the UNO R4 Minima, then close Serial Monitor.
 3. Open the deployed site directly in desktop Chrome or Edge, or run `python -m http.server 8080 --bind 127.0.0.1 --directory public` from the repository root and open **http://localhost:8080**.
 4. Click **Start camera** and stand upright, side-on, with nose, shoulder and hip visible. **U** resets the upright reference. The teal joints show person detection, and the caption and ramp glow track changes in lean.
-5. Click **Connect Uno** and choose the Uno. The page checks the exact stored endpoints. If they differ, it offers to move the unloaded rocker and save the demo endpoints using the original calibration commands. Cancel leaves the previous endpoints intact. Matching endpoints need no setup or EEPROM write.
-6. The interface sends **ARM**, then **LEAN 0** to start the belt. It streams **LEAN** about eight times a second, including while upright or when tracking drops. Upright commands 1350 µs, 15° backward lean commands 1500 µs and 30° or more commands 1650 µs. The original belt speed is 160/255. The Uno runs the servo and belt together.
-7. A dedicated USB worker keeps sending lean updates independently of drawing and camera inference. With no fresh pose it sends zero lean and the belt continues. **Disconnect Uno** or **Esc** sends **STOP**. If USB commands cease for two seconds (for example, the tab closes or the computer sleeps), the original sketch stops the motor and holds the rocker.
+5. Click **Connect Uno** and select the board. The page checks the 1300 and 1450 microsecond endpoints and selects SPEED 0 if the board reports a different speed.
+6. The interface arms the servo and streams lean updates about eight times a second. Upright commands 1300 µs and maximum lean commands 1450 µs. The belt runs at the build's calibrated SPEED 0 setting.
+7. A dedicated USB worker sends zero lean when the pose is lost. Disconnecting pauses servo updates. The belt keeps its selected speed and the servo holds its last position on a serial timeout.
 8. The animation follows the servo pulse and motor enable state reported by **STATUS**. To line up the animated balls, press **B** when a physical ball leaves the low end, then again when the same ball returns. There is no physical motor encoder.
 
 ## If the belt stops when the servo moves

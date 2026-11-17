@@ -24,10 +24,6 @@ export class Controller {
       worker.onerror=()=>finish("USB worker stopped. Reconnect the Uno.");
       worker.onmessage=({data})=>{
         switch(data.type){
-          case "setup": {
-            const approved=window.confirm("Set the original Uno sketch to the demo range of 1350–1650 µs? The rocker will move and the Uno will save both endpoints. Support the fixed ramp and disconnect the rocker link before continuing.");
-            worker.postMessage({type:"setup",approved}); break;
-          }
           case "ready": this.active=true;this.running=true;resolve();break;
           case "status": this.feedback=data.feedback;this.running=data.running;break;
           case "closed": finish(data.error);break;
